@@ -74,6 +74,11 @@ func (r *NodeExporterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, err
 	}
 
+	// Handle Kube State Metrics
+	if err := r.reconcileKubeStateMetrics(ctx, nodeExporter); err != nil {
+		return ctrl.Result{}, err
+	}
+
 	return ctrl.Result{}, nil
 }
 
@@ -409,6 +414,142 @@ func (r *NodeExporterReconciler) nodeExporterDaemonSet(nodeExporter *cachev1alph
 							Operator: corev1.TolerationOpExists,
 						},
 					},
+				},
+			},
+		},
+	}
+}
+
+// reconcileKubeStateMetrics handles the Kube State Metrics DaemonSet lifecycle
+func (r *NodeExporterReconciler) reconcileKubeStateMetrics(ctx context.Context, nodeExporter *cachev1alpha1.NodeExporter) error {
+	logger := log.FromContext(ctx)
+
+	if !nodeExporter.Spec.KubeStateMetricsSettings.Enabled {
+		// Kube State Metrics is disabled, ensure the DaemonSet is removed
+		if err := r.cleanupKubeStateMetrics(ctx, nodeExporter); err != nil {
+			logger.Error(err, "Failed to cleanup KubeStateMetrics")
+			return err
+		}
+		return nil
+	}
+
+	// Create or update the DaemonSet
+	daemonSet := r.kubeStateMetricsDaemonSet(nodeExporter)
+
+	// Check if the DaemonSet already exists
+	found := &appsv1.DaemonSet{}
+	err := r.Get(ctx, types.NamespacedName{Name: daemonSet.Name, Namespace: daemonSet.Namespace}, found)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			// DaemonSet does not exist, create it
+			logger.Info("Creating a new KubeStateMetrics DaemonSet", "DaemonSet.Namespace", daemonSet.Namespace, "DaemonSet.Name", daemonSet.Name)
+			err = r.Create(ctx, daemonSet)
+			if err != nil {
+				logger.Error(err, "Failed to create new KubeStateMetrics DaemonSet")
+				return err
+			}
+		} else {
+			logger.Error(err, "Failed to get KubeStateMetrics DaemonSet")
+			return err
+		}
+	} else {
+		// DaemonSet exists, update it
+		logger.Info("Updating existing KubeStateMetrics DaemonSet", "DaemonSet.Namespace", daemonSet.Namespace, "DaemonSet.Name", daemonSet.Name)
+		err = r.Update(ctx, daemonSet)
+		if err != nil {
+			logger.Error(err, "Failed to update KubeStateMetrics DaemonSet")
+			return err
+		}
+	}
+
+	return nil
+}
+
+// cleanupKubeStateMetrics removes the Kube State Metrics DaemonSet if it exists
+func (r *NodeExporterReconciler) cleanupKubeStateMetrics(ctx context.Context, nodeExporter *cachev1alpha1.NodeExporter) error {
+	// Check if DaemonSet exists
+	daemonSet := &appsv1.DaemonSet{}
+	err := r.Get(ctx, types.NamespacedName{
+		Name:      "kube-state-metrics-" + nodeExporter.Name,
+		Namespace: nodeExporter.Namespace,
+	}, daemonSet)
+
+	if err != nil {
+		if errors.IsNotFound(err) {
+			// DaemonSet doesn't exist, nothing to do
+			return nil
+		}
+		return err
+	}
+
+	// DaemonSet exists, delete it
+	return r.Delete(ctx, daemonSet)
+}
+
+// kubeStateMetricsDaemonSet returns a kube-state-metrics DaemonSet object
+func (r *NodeExporterReconciler) kubeStateMetricsDaemonSet(nodeExporter *cachev1alpha1.NodeExporter) *appsv1.DaemonSet {
+	labels := map[string]string{
+		"app":        "kube-state-metrics",
+		"controller": nodeExporter.Name,
+	}
+
+	return &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "kube-state-metrics-" + nodeExporter.Name,
+			Namespace: nodeExporter.Namespace,
+			Labels:    labels,
+		},
+		Spec: appsv1.DaemonSetSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: labels,
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: labels,
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:  "kube-state-metrics",
+							Image: "registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.10.1",
+							Args: []string{
+								"--port=8080",
+								"--telemetry-port=8081",
+							},
+							Ports: []corev1.ContainerPort{
+								{
+									Name:          "metrics",
+									ContainerPort: 8080,
+									Protocol:      corev1.ProtocolTCP,
+								},
+								{
+									Name:          "telemetry",
+									ContainerPort: 8081,
+									Protocol:      corev1.ProtocolTCP,
+								},
+							},
+							Resources: corev1.ResourceRequirements{
+								Requests: corev1.ResourceList{
+									corev1.ResourceCPU:    resource.MustParse("100m"),
+									corev1.ResourceMemory: resource.MustParse("128Mi"),
+								},
+								Limits: corev1.ResourceList{
+									corev1.ResourceCPU:    resource.MustParse("200m"),
+									corev1.ResourceMemory: resource.MustParse("256Mi"),
+								},
+							},
+							SecurityContext: &corev1.SecurityContext{
+								AllowPrivilegeEscalation: &[]bool{false}[0],
+								ReadOnlyRootFilesystem:   &[]bool{true}[0],
+								RunAsUser:                &[]int64{65534}[0],
+							},
+						},
+					},
+					SecurityContext: &corev1.PodSecurityContext{
+						RunAsNonRoot: &[]bool{true}[0],
+						RunAsUser:    &[]int64{65534}[0],
+					},
+					ServiceAccountName: "kube-state-metrics",
 				},
 			},
 		},

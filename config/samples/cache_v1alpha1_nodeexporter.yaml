@@ -11,4 +11,4 @@ spec:
   blackboxExporterSettings:
     enabled: true
   kubeStateMetricsSettings:
-    enabled: false
+    enabled: true
