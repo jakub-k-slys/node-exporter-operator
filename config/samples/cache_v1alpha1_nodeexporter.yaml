@@ -6,4 +6,9 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: nodeexporter-sample
 spec:
-  # TODO(user): Add fields here
+  nodeExporterSettings:
+    enabled: true
+  blackboxExporterSettings:
+    enabled: false
+  kubeStateMetricsSettings:
+    enabled: false
