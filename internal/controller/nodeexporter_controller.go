@@ -28,10 +28,61 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	cachev1alpha1 "github.com/jakub-k-slys/node-exporter-operator/api/v1alpha1"
 )
+
+// createServiceAccount creates a ServiceAccount if it doesn't exist
+func (r *NodeExporterReconciler) createServiceAccount(ctx context.Context, name string, namespace string, nodeExporter *cachev1alpha1.NodeExporter) error {
+	sa := &corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+			Labels: map[string]string{
+				"app":        name,
+				"controller": nodeExporter.Name,
+			},
+		},
+	}
+
+	// Set controller reference to enable garbage collection
+	if err := controllerutil.SetControllerReference(nodeExporter, sa, r.Scheme); err != nil {
+		return err
+	}
+
+	// Check if ServiceAccount exists
+	found := &corev1.ServiceAccount{}
+	err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, found)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			// Create the ServiceAccount
+			err = r.Create(ctx, sa)
+			if err != nil {
+				return err
+			}
+		} else {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// cleanupServiceAccount removes a ServiceAccount if it exists
+func (r *NodeExporterReconciler) cleanupServiceAccount(ctx context.Context, name string, namespace string) error {
+	sa := &corev1.ServiceAccount{}
+	err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, sa)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+
+	return r.Delete(ctx, sa)
+}
 
 // NodeExporterReconciler reconciles a NodeExporter object
 type NodeExporterReconciler struct {
@@ -46,6 +97,7 @@ type NodeExporterReconciler struct {
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch
+// +kubebuilder:rbac:groups=core,resources=serviceaccounts,verbs=get;list;watch;create;update;patch;delete
 func (r *NodeExporterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
@@ -87,12 +139,22 @@ func (r *NodeExporterReconciler) reconcileNodeExporter(ctx context.Context, node
 	logger := log.FromContext(ctx)
 
 	if !nodeExporter.Spec.NodeExporterSettings.Enabled {
-		// Node exporter is disabled, ensure the DaemonSet is removed
+		// Node exporter is disabled, ensure the DaemonSet and ServiceAccount are removed
 		if err := r.cleanupNodeExporter(ctx, nodeExporter); err != nil {
 			logger.Error(err, "Failed to cleanup NodeExporter")
 			return err
 		}
+		if err := r.cleanupServiceAccount(ctx, "node-exporter", nodeExporter.Namespace); err != nil {
+			logger.Error(err, "Failed to cleanup NodeExporter ServiceAccount")
+			return err
+		}
 		return nil
+	}
+
+	// Create ServiceAccount first
+	if err := r.createServiceAccount(ctx, "node-exporter", nodeExporter.Namespace, nodeExporter); err != nil {
+		logger.Error(err, "Failed to create ServiceAccount for NodeExporter")
+		return err
 	}
 
 	// Create or update the DaemonSet
@@ -147,12 +209,22 @@ func (r *NodeExporterReconciler) reconcileBlackboxExporter(ctx context.Context, 
 	logger := log.FromContext(ctx)
 
 	if !nodeExporter.Spec.BlackboxExporterSettings.Enabled {
-		// Blackbox exporter is disabled, ensure the DaemonSet is removed
+		// Blackbox exporter is disabled, ensure the DaemonSet and ServiceAccount are removed
 		if err := r.cleanupBlackboxExporter(ctx, nodeExporter); err != nil {
 			logger.Error(err, "Failed to cleanup BlackboxExporter")
 			return err
 		}
+		if err := r.cleanupServiceAccount(ctx, "blackbox-exporter", nodeExporter.Namespace); err != nil {
+			logger.Error(err, "Failed to cleanup BlackboxExporter ServiceAccount")
+			return err
+		}
 		return nil
+	}
+
+	// Create ServiceAccount first
+	if err := r.createServiceAccount(ctx, "blackbox-exporter", nodeExporter.Namespace, nodeExporter); err != nil {
+		logger.Error(err, "Failed to create ServiceAccount for BlackboxExporter")
+		return err
 	}
 
 	// Create or update the DaemonSet
@@ -425,12 +497,22 @@ func (r *NodeExporterReconciler) reconcileKubeStateMetrics(ctx context.Context, 
 	logger := log.FromContext(ctx)
 
 	if !nodeExporter.Spec.KubeStateMetricsSettings.Enabled {
-		// Kube State Metrics is disabled, ensure the DaemonSet is removed
+		// Kube State Metrics is disabled, ensure the DaemonSet and ServiceAccount are removed
 		if err := r.cleanupKubeStateMetrics(ctx, nodeExporter); err != nil {
 			logger.Error(err, "Failed to cleanup KubeStateMetrics")
 			return err
 		}
+		if err := r.cleanupServiceAccount(ctx, "kube-state-metrics", nodeExporter.Namespace); err != nil {
+			logger.Error(err, "Failed to cleanup KubeStateMetrics ServiceAccount")
+			return err
+		}
 		return nil
+	}
+
+	// Create ServiceAccount first
+	if err := r.createServiceAccount(ctx, "kube-state-metrics", nodeExporter.Namespace, nodeExporter); err != nil {
+		logger.Error(err, "Failed to create ServiceAccount for KubeStateMetrics")
+		return err
 	}
 
 	// Create or update the DaemonSet
@@ -561,5 +643,6 @@ func (r *NodeExporterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&cachev1alpha1.NodeExporter{}).
 		Owns(&appsv1.DaemonSet{}).
+		Owns(&corev1.ServiceAccount{}).
 		Complete(r)
 }
