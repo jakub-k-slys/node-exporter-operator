@@ -1,8 +1,19 @@
 # node-exporter-operator
-// TODO(user): Add simple overview of use/purpose
+A Kubernetes operator that simplifies the deployment and management of Prometheus monitoring components including Node Exporter, Blackbox Exporter, and Kube State Metrics.
 
 ## Description
-// TODO(user): An in-depth paragraph about your project and overview of use
+This operator provides a unified way to deploy and manage three essential Prometheus monitoring components in your Kubernetes cluster:
+
+1. **Node Exporter**: Collects hardware and OS metrics from cluster nodes, such as CPU usage, memory, disk I/O, and network statistics.
+2. **Blackbox Exporter**: Probes endpoints over HTTP, HTTPS, DNS, TCP and ICMP, enabling monitoring of endpoints and services both inside and outside your cluster.
+3. **Kube State Metrics**: Generates metrics about the state of various Kubernetes objects, including deployments, pods, and nodes.
+
+Each component can be enabled or disabled independently through the NodeExporter custom resource. The operator handles the complete lifecycle of these components, including:
+- Creating necessary ServiceAccounts and RBAC permissions
+- Managing DaemonSets for each component
+- Configuring the Blackbox Exporter through a ConfigMap
+- Setting appropriate resource limits and security contexts
+- Cleaning up resources when components are disabled
 
 ## Getting Started
 
@@ -90,7 +101,22 @@ kubectl apply -f https://raw.githubusercontent.com/<org>/node-exporter-operator/
 ```
 
 ## Contributing
-// TODO(user): Add detailed information on how you would like others to contribute to this project
+We welcome contributions to the node-exporter-operator project! Here's how you can contribute:
+
+1. **Bug Reports**: Open an issue describing the bug, including steps to reproduce and expected behavior.
+
+2. **Feature Requests**: Submit an issue describing the new feature and its potential benefits.
+
+3. **Code Contributions**:
+   - Fork the repository
+   - Create a new branch for your feature/fix
+   - Write tests for new functionality
+   - Ensure all tests pass by running `make test`
+   - Submit a pull request with a clear description of changes
+
+4. **Documentation**: Help improve documentation by fixing typos, adding examples, or clarifying instructions.
+
+Please ensure your contributions adhere to our coding standards and include appropriate tests and documentation.
 
 **NOTE:** Run `make help` for more information on all potential `make` targets
 
@@ -111,4 +137,3 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
-
