@@ -84,6 +84,76 @@ func (r *NodeExporterReconciler) cleanupServiceAccount(ctx context.Context, name
 	return r.Delete(ctx, sa)
 }
 
+// createBlackboxConfigMap creates a ConfigMap for blackbox exporter if it doesn't exist
+func (r *NodeExporterReconciler) createBlackboxConfigMap(ctx context.Context, nodeExporter *cachev1alpha1.NodeExporter) error {
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "blackbox-exporter-config",
+			Namespace: nodeExporter.Namespace,
+			Labels: map[string]string{
+				"app":        "blackbox-exporter",
+				"controller": nodeExporter.Name,
+			},
+		},
+		Data: map[string]string{
+			"blackbox.yml": `modules:
+  http_2xx:
+    prober: http
+    timeout: 5s
+    http:
+      preferred_ip_protocol: "ip4"
+      valid_status_codes: [200]
+  http_post_2xx:
+    prober: http
+    http:
+      method: POST
+  tcp_connect:
+    prober: tcp
+  icmp:
+    prober: icmp
+    timeout: 5s
+    icmp:
+      preferred_ip_protocol: "ip4"`,
+		},
+	}
+
+	// Set controller reference to enable garbage collection
+	if err := controllerutil.SetControllerReference(nodeExporter, cm, r.Scheme); err != nil {
+		return err
+	}
+
+	// Check if ConfigMap exists
+	found := &corev1.ConfigMap{}
+	err := r.Get(ctx, types.NamespacedName{Name: cm.Name, Namespace: cm.Namespace}, found)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			// Create the ConfigMap
+			err = r.Create(ctx, cm)
+			if err != nil {
+				return err
+			}
+		} else {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// cleanupBlackboxConfigMap removes the blackbox exporter ConfigMap if it exists
+func (r *NodeExporterReconciler) cleanupBlackboxConfigMap(ctx context.Context, namespace string) error {
+	cm := &corev1.ConfigMap{}
+	err := r.Get(ctx, types.NamespacedName{Name: "blackbox-exporter-config", Namespace: namespace}, cm)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+
+	return r.Delete(ctx, cm)
+}
+
 // NodeExporterReconciler reconciles a NodeExporter object
 type NodeExporterReconciler struct {
 	client.Client
@@ -98,6 +168,7 @@ type NodeExporterReconciler struct {
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch
 // +kubebuilder:rbac:groups=core,resources=serviceaccounts,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 func (r *NodeExporterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
@@ -218,10 +289,20 @@ func (r *NodeExporterReconciler) reconcileBlackboxExporter(ctx context.Context, 
 			logger.Error(err, "Failed to cleanup BlackboxExporter ServiceAccount")
 			return err
 		}
+		if err := r.cleanupBlackboxConfigMap(ctx, nodeExporter.Namespace); err != nil {
+			logger.Error(err, "Failed to cleanup BlackboxExporter ConfigMap")
+			return err
+		}
 		return nil
 	}
 
-	// Create ServiceAccount first
+	// Create ConfigMap first
+	if err := r.createBlackboxConfigMap(ctx, nodeExporter); err != nil {
+		logger.Error(err, "Failed to create ConfigMap for BlackboxExporter")
+		return err
+	}
+
+	// Create ServiceAccount
 	if err := r.createServiceAccount(ctx, "blackbox-exporter", nodeExporter.Namespace, nodeExporter); err != nil {
 		logger.Error(err, "Failed to create ServiceAccount for BlackboxExporter")
 		return err
@@ -644,5 +725,6 @@ func (r *NodeExporterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&cachev1alpha1.NodeExporter{}).
 		Owns(&appsv1.DaemonSet{}).
 		Owns(&corev1.ServiceAccount{}).
+		Owns(&corev1.ConfigMap{}).
 		Complete(r)
 }
