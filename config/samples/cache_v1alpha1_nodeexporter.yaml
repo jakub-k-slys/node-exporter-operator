@@ -9,6 +9,6 @@ spec:
   nodeExporterSettings:
     enabled: true
   blackboxExporterSettings:
-    enabled: false
+    enabled: true
   kubeStateMetricsSettings:
     enabled: false

@@ -64,14 +64,30 @@ func (r *NodeExporterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, err
 	}
 
-	// Check if nodeExporter is enabled
+	// Handle Node Exporter
+	if err := r.reconcileNodeExporter(ctx, nodeExporter); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	// Handle Blackbox Exporter
+	if err := r.reconcileBlackboxExporter(ctx, nodeExporter); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	return ctrl.Result{}, nil
+}
+
+// reconcileNodeExporter handles the Node Exporter DaemonSet lifecycle
+func (r *NodeExporterReconciler) reconcileNodeExporter(ctx context.Context, nodeExporter *cachev1alpha1.NodeExporter) error {
+	logger := log.FromContext(ctx)
+
 	if !nodeExporter.Spec.NodeExporterSettings.Enabled {
 		// Node exporter is disabled, ensure the DaemonSet is removed
 		if err := r.cleanupNodeExporter(ctx, nodeExporter); err != nil {
 			logger.Error(err, "Failed to cleanup NodeExporter")
-			return ctrl.Result{}, err
+			return err
 		}
-		return ctrl.Result{}, nil
+		return nil
 	}
 
 	// Create or update the DaemonSet
@@ -79,33 +95,33 @@ func (r *NodeExporterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 	// Check if the DaemonSet already exists
 	found := &appsv1.DaemonSet{}
-	err = r.Get(ctx, types.NamespacedName{Name: daemonSet.Name, Namespace: daemonSet.Namespace}, found)
+	err := r.Get(ctx, types.NamespacedName{Name: daemonSet.Name, Namespace: daemonSet.Namespace}, found)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// DaemonSet does not exist, create it
-			logger.Info("Creating a new DaemonSet", "DaemonSet.Namespace", daemonSet.Namespace, "DaemonSet.Name", daemonSet.Name)
+			logger.Info("Creating a new NodeExporter DaemonSet", "DaemonSet.Namespace", daemonSet.Namespace, "DaemonSet.Name", daemonSet.Name)
 			err = r.Create(ctx, daemonSet)
 			if err != nil {
-				logger.Error(err, "Failed to create new DaemonSet", "DaemonSet.Namespace", daemonSet.Namespace, "DaemonSet.Name", daemonSet.Name)
-				return ctrl.Result{}, err
+				logger.Error(err, "Failed to create new NodeExporter DaemonSet")
+				return err
 			}
 		} else {
-			logger.Error(err, "Failed to get DaemonSet")
-			return ctrl.Result{}, err
+			logger.Error(err, "Failed to get NodeExporter DaemonSet")
+			return err
 		}
 	} else {
 		// DaemonSet exists, update it
-		logger.Info("Updating existing DaemonSet", "DaemonSet.Namespace", daemonSet.Namespace, "DaemonSet.Name", daemonSet.Name)
+		logger.Info("Updating existing NodeExporter DaemonSet", "DaemonSet.Namespace", daemonSet.Namespace, "DaemonSet.Name", daemonSet.Name)
 		err = r.Update(ctx, daemonSet)
 		if err != nil {
-			logger.Error(err, "Failed to update DaemonSet", "DaemonSet.Namespace", daemonSet.Namespace, "DaemonSet.Name", daemonSet.Name)
-			return ctrl.Result{}, err
+			logger.Error(err, "Failed to update NodeExporter DaemonSet")
+			return err
 		}
 	}
 
 	// Update status
 	condition := metav1.Condition{
-		Type:               "Available",
+		Type:               "NodeExporterAvailable",
 		Status:             metav1.ConditionTrue,
 		Reason:             "NodeExporterDeployed",
 		Message:            "Node Exporter DaemonSet is deployed",
@@ -115,13 +131,58 @@ func (r *NodeExporterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	nodeExporter.Status.Conditions = []metav1.Condition{condition}
 	if err := r.Status().Update(ctx, nodeExporter); err != nil {
 		logger.Error(err, "Failed to update NodeExporter status")
-		return ctrl.Result{}, err
+		return err
 	}
 
-	return ctrl.Result{}, nil
+	return nil
 }
 
-// cleanupNodeExporter removes the DaemonSet if it exists
+// reconcileBlackboxExporter handles the Blackbox Exporter DaemonSet lifecycle
+func (r *NodeExporterReconciler) reconcileBlackboxExporter(ctx context.Context, nodeExporter *cachev1alpha1.NodeExporter) error {
+	logger := log.FromContext(ctx)
+
+	if !nodeExporter.Spec.BlackboxExporterSettings.Enabled {
+		// Blackbox exporter is disabled, ensure the DaemonSet is removed
+		if err := r.cleanupBlackboxExporter(ctx, nodeExporter); err != nil {
+			logger.Error(err, "Failed to cleanup BlackboxExporter")
+			return err
+		}
+		return nil
+	}
+
+	// Create or update the DaemonSet
+	daemonSet := r.blackboxExporterDaemonSet(nodeExporter)
+
+	// Check if the DaemonSet already exists
+	found := &appsv1.DaemonSet{}
+	err := r.Get(ctx, types.NamespacedName{Name: daemonSet.Name, Namespace: daemonSet.Namespace}, found)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			// DaemonSet does not exist, create it
+			logger.Info("Creating a new BlackboxExporter DaemonSet", "DaemonSet.Namespace", daemonSet.Namespace, "DaemonSet.Name", daemonSet.Name)
+			err = r.Create(ctx, daemonSet)
+			if err != nil {
+				logger.Error(err, "Failed to create new BlackboxExporter DaemonSet")
+				return err
+			}
+		} else {
+			logger.Error(err, "Failed to get BlackboxExporter DaemonSet")
+			return err
+		}
+	} else {
+		// DaemonSet exists, update it
+		logger.Info("Updating existing BlackboxExporter DaemonSet", "DaemonSet.Namespace", daemonSet.Namespace, "DaemonSet.Name", daemonSet.Name)
+		err = r.Update(ctx, daemonSet)
+		if err != nil {
+			logger.Error(err, "Failed to update BlackboxExporter DaemonSet")
+			return err
+		}
+	}
+
+	return nil
+}
+
+// cleanupNodeExporter removes the Node Exporter DaemonSet if it exists
 func (r *NodeExporterReconciler) cleanupNodeExporter(ctx context.Context, nodeExporter *cachev1alpha1.NodeExporter) error {
 	// Check if DaemonSet exists
 	daemonSet := &appsv1.DaemonSet{}
@@ -140,6 +201,105 @@ func (r *NodeExporterReconciler) cleanupNodeExporter(ctx context.Context, nodeEx
 
 	// DaemonSet exists, delete it
 	return r.Delete(ctx, daemonSet)
+}
+
+// cleanupBlackboxExporter removes the Blackbox Exporter DaemonSet if it exists
+func (r *NodeExporterReconciler) cleanupBlackboxExporter(ctx context.Context, nodeExporter *cachev1alpha1.NodeExporter) error {
+	// Check if DaemonSet exists
+	daemonSet := &appsv1.DaemonSet{}
+	err := r.Get(ctx, types.NamespacedName{
+		Name:      "blackbox-exporter-" + nodeExporter.Name,
+		Namespace: nodeExporter.Namespace,
+	}, daemonSet)
+
+	if err != nil {
+		if errors.IsNotFound(err) {
+			// DaemonSet doesn't exist, nothing to do
+			return nil
+		}
+		return err
+	}
+
+	// DaemonSet exists, delete it
+	return r.Delete(ctx, daemonSet)
+}
+
+// blackboxExporterDaemonSet returns a blackbox-exporter DaemonSet object
+func (r *NodeExporterReconciler) blackboxExporterDaemonSet(nodeExporter *cachev1alpha1.NodeExporter) *appsv1.DaemonSet {
+	labels := map[string]string{
+		"app":        "blackbox-exporter",
+		"controller": nodeExporter.Name,
+	}
+
+	return &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "blackbox-exporter-" + nodeExporter.Name,
+			Namespace: nodeExporter.Namespace,
+			Labels:    labels,
+		},
+		Spec: appsv1.DaemonSetSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: labels,
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: labels,
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:  "blackbox-exporter",
+							Image: "prom/blackbox-exporter:v0.24.0",
+							Args: []string{
+								"--config.file=/config/blackbox.yml",
+								"--web.listen-address=:9115",
+							},
+							Ports: []corev1.ContainerPort{
+								{
+									Name:          "http",
+									ContainerPort: 9115,
+									Protocol:      corev1.ProtocolTCP,
+								},
+							},
+							Resources: corev1.ResourceRequirements{
+								Requests: corev1.ResourceList{
+									corev1.ResourceCPU:    resource.MustParse("100m"),
+									corev1.ResourceMemory: resource.MustParse("30Mi"),
+								},
+								Limits: corev1.ResourceList{
+									corev1.ResourceCPU:    resource.MustParse("200m"),
+									corev1.ResourceMemory: resource.MustParse("50Mi"),
+								},
+							},
+							VolumeMounts: []corev1.VolumeMount{
+								{
+									Name:      "config",
+									MountPath: "/config",
+								},
+							},
+						},
+					},
+					Volumes: []corev1.Volume{
+						{
+							Name: "config",
+							VolumeSource: corev1.VolumeSource{
+								ConfigMap: &corev1.ConfigMapVolumeSource{
+									LocalObjectReference: corev1.LocalObjectReference{
+										Name: "blackbox-exporter-config",
+									},
+								},
+							},
+						},
+					},
+					SecurityContext: &corev1.PodSecurityContext{
+						RunAsNonRoot: &[]bool{true}[0],
+						RunAsUser:    &[]int64{65534}[0],
+					},
+					ServiceAccountName: "blackbox-exporter",
+				},
+			},
+		},
+	}
 }
 
 // nodeExporterDaemonSet returns a node-exporter DaemonSet object
