@@ -39,17 +39,17 @@ spec:
           spec:
             description: NodeExporterSpec defines the desired state of NodeExporter
             properties:
-              blackboxExporterSettings:
+              blackboxExporter:
                 properties:
                   enabled:
                     type: boolean
                 type: object
-              kubeStateMetricsSettings:
+              kubeStateMetrics:
                 properties:
                   enabled:
                     type: boolean
                 type: object
-              nodeExporterSettings:
+              nodeExporter:
                 description: |-
                   EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
                   NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.

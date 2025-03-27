@@ -43,11 +43,11 @@ type NodeExporterSpec struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
 	// +operator-sdk:csv:customresourcedefinitions:type=spec
-	NodeExporterSettings NodeExporterSettings `json:"nodeExporterSettings,omitempty"`
+	NodeExporterSettings NodeExporterSettings `json:"nodeExporter,omitempty"`
 	// +operator-sdk:csv:customresourcedefinitions:type=spec
-	BlackboxExporterSettings BlackboxExporterSettings `json:"blackboxExporterSettings,omitempty"`
+	BlackboxExporterSettings BlackboxExporterSettings `json:"blackboxExporter,omitempty"`
 	// +operator-sdk:csv:customresourcedefinitions:type=spec
-	KubeStateMetricsSettings KubeStateMetricsSettings `json:"kubeStateMetricsSettings,omitempty"`
+	KubeStateMetricsSettings KubeStateMetricsSettings `json:"kubeStateMetrics,omitempty"`
 }
 
 // NodeExporterStatus defines the observed state of NodeExporter
