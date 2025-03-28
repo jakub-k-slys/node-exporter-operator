@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -26,6 +27,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -33,6 +35,106 @@ import (
 
 	cachev1alpha1 "github.com/jakub-k-slys/node-exporter-operator/api/v1alpha1"
 )
+
+// Constants for exporter configuration
+const (
+	nodeExporterPort     = 9100
+	blackboxExporterPort = 9115
+	kubeStateMetricsPort = 8080
+	metricsPath          = "/metrics"
+	scrapeInterval       = "30s"
+)
+
+// createOrUpdateService creates or updates a Service for an exporter
+func (r *NodeExporterReconciler) createOrUpdateService(ctx context.Context, nodeExporter *cachev1alpha1.NodeExporter, name string, port int32) error {
+	labels := map[string]string{
+		"app":        name,
+		"controller": nodeExporter.Name,
+	}
+
+	svc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name + "-" + nodeExporter.Name,
+			Namespace: nodeExporter.Namespace,
+			Labels:    labels,
+		},
+		Spec: corev1.ServiceSpec{
+			Selector: labels,
+			Ports: []corev1.ServicePort{{
+				Name:       "metrics",
+				Port:       port,
+				TargetPort: intstr.FromInt(int(port)),
+				Protocol:   corev1.ProtocolTCP,
+			}},
+		},
+	}
+
+	// Set controller reference
+	if err := controllerutil.SetControllerReference(nodeExporter, svc, r.Scheme); err != nil {
+		return err
+	}
+
+	// Check if Service exists
+	found := &corev1.Service{}
+	err := r.Get(ctx, types.NamespacedName{Name: svc.Name, Namespace: svc.Namespace}, found)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return r.Create(ctx, svc)
+		}
+		return err
+	}
+
+	// Update existing Service
+	found.Spec = svc.Spec
+	found.Labels = svc.Labels
+	return r.Update(ctx, found)
+}
+
+// createOrUpdateServiceMonitor creates or updates a ServiceMonitor for an exporter
+func (r *NodeExporterReconciler) createOrUpdateServiceMonitor(ctx context.Context, nodeExporter *cachev1alpha1.NodeExporter, name string) error {
+	labels := map[string]string{
+		"app":        name,
+		"controller": nodeExporter.Name,
+	}
+
+	sm := &monitoringv1.ServiceMonitor{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name + "-" + nodeExporter.Name,
+			Namespace: nodeExporter.Namespace,
+			Labels:    labels,
+		},
+		Spec: monitoringv1.ServiceMonitorSpec{
+			Selector: metav1.LabelSelector{
+				MatchLabels: labels,
+			},
+			Endpoints: []monitoringv1.Endpoint{{
+				Port:     "metrics",
+				Path:     metricsPath,
+				Interval: scrapeInterval,
+			}},
+		},
+	}
+
+	// Set controller reference
+	if err := controllerutil.SetControllerReference(nodeExporter, sm, r.Scheme); err != nil {
+		return err
+	}
+
+	// Check if ServiceMonitor exists
+	found := &monitoringv1.ServiceMonitor{}
+	err := r.Get(ctx, types.NamespacedName{Name: sm.Name, Namespace: sm.Namespace}, found)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return r.Create(ctx, sm)
+		}
+		return err
+	}
+
+	// Update existing ServiceMonitor
+	found.Spec = sm.Spec
+	found.Labels = sm.Labels
+	return r.Update(ctx, found)
+}
 
 // createServiceAccount creates a ServiceAccount if it doesn't exist
 func (r *NodeExporterReconciler) createServiceAccount(ctx context.Context, name string, namespace string, nodeExporter *cachev1alpha1.NodeExporter) error {
@@ -167,8 +269,10 @@ type NodeExporterReconciler struct {
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch
+// +kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=serviceaccounts,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=monitoring.coreos.com,resources=servicemonitors,verbs=get;list;watch;create;update;patch;delete
 func (r *NodeExporterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
@@ -225,6 +329,18 @@ func (r *NodeExporterReconciler) reconcileNodeExporter(ctx context.Context, node
 	// Create ServiceAccount first
 	if err := r.createServiceAccount(ctx, "node-exporter", nodeExporter.Namespace, nodeExporter); err != nil {
 		logger.Error(err, "Failed to create ServiceAccount for NodeExporter")
+		return err
+	}
+
+	// Create or update the Service
+	if err := r.createOrUpdateService(ctx, nodeExporter, "node-exporter", nodeExporterPort); err != nil {
+		logger.Error(err, "Failed to create/update Service for NodeExporter")
+		return err
+	}
+
+	// Create or update the ServiceMonitor
+	if err := r.createOrUpdateServiceMonitor(ctx, nodeExporter, "node-exporter"); err != nil {
+		logger.Error(err, "Failed to create/update ServiceMonitor for NodeExporter")
 		return err
 	}
 
@@ -308,6 +424,18 @@ func (r *NodeExporterReconciler) reconcileBlackboxExporter(ctx context.Context, 
 		return err
 	}
 
+	// Create or update the Service
+	if err := r.createOrUpdateService(ctx, nodeExporter, "blackbox-exporter", blackboxExporterPort); err != nil {
+		logger.Error(err, "Failed to create/update Service for BlackboxExporter")
+		return err
+	}
+
+	// Create or update the ServiceMonitor
+	if err := r.createOrUpdateServiceMonitor(ctx, nodeExporter, "blackbox-exporter"); err != nil {
+		logger.Error(err, "Failed to create/update ServiceMonitor for BlackboxExporter")
+		return err
+	}
+
 	// Create or update the DaemonSet
 	daemonSet := r.blackboxExporterDaemonSet(nodeExporter)
 
@@ -340,46 +468,62 @@ func (r *NodeExporterReconciler) reconcileBlackboxExporter(ctx context.Context, 
 	return nil
 }
 
-// cleanupNodeExporter removes the Node Exporter DaemonSet if it exists
+// cleanupNodeExporter removes the Node Exporter resources if they exist
 func (r *NodeExporterReconciler) cleanupNodeExporter(ctx context.Context, nodeExporter *cachev1alpha1.NodeExporter) error {
-	// Check if DaemonSet exists
-	daemonSet := &appsv1.DaemonSet{}
-	err := r.Get(ctx, types.NamespacedName{
-		Name:      "node-exporter-" + nodeExporter.Name,
-		Namespace: nodeExporter.Namespace,
-	}, daemonSet)
+	name := "node-exporter-" + nodeExporter.Name
+	ns := nodeExporter.Namespace
 
-	if err != nil {
-		if errors.IsNotFound(err) {
-			// DaemonSet doesn't exist, nothing to do
-			return nil
-		}
+	// Delete DaemonSet
+	if err := r.cleanupResource(ctx, &appsv1.DaemonSet{}, name, ns); err != nil {
 		return err
 	}
 
-	// DaemonSet exists, delete it
-	return r.Delete(ctx, daemonSet)
+	// Delete Service
+	if err := r.cleanupResource(ctx, &corev1.Service{}, name, ns); err != nil {
+		return err
+	}
+
+	// Delete ServiceMonitor
+	if err := r.cleanupResource(ctx, &monitoringv1.ServiceMonitor{}, name, ns); err != nil {
+		return err
+	}
+
+	return nil
 }
 
-// cleanupBlackboxExporter removes the Blackbox Exporter DaemonSet if it exists
-func (r *NodeExporterReconciler) cleanupBlackboxExporter(ctx context.Context, nodeExporter *cachev1alpha1.NodeExporter) error {
-	// Check if DaemonSet exists
-	daemonSet := &appsv1.DaemonSet{}
-	err := r.Get(ctx, types.NamespacedName{
-		Name:      "blackbox-exporter-" + nodeExporter.Name,
-		Namespace: nodeExporter.Namespace,
-	}, daemonSet)
-
+// cleanupResource is a generic function to delete a Kubernetes resource
+func (r *NodeExporterReconciler) cleanupResource(ctx context.Context, obj client.Object, name, namespace string) error {
+	err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, obj)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			// DaemonSet doesn't exist, nothing to do
 			return nil
 		}
 		return err
 	}
+	return r.Delete(ctx, obj)
+}
 
-	// DaemonSet exists, delete it
-	return r.Delete(ctx, daemonSet)
+// cleanupBlackboxExporter removes the Blackbox Exporter resources if they exist
+func (r *NodeExporterReconciler) cleanupBlackboxExporter(ctx context.Context, nodeExporter *cachev1alpha1.NodeExporter) error {
+	name := "blackbox-exporter-" + nodeExporter.Name
+	ns := nodeExporter.Namespace
+
+	// Delete DaemonSet
+	if err := r.cleanupResource(ctx, &appsv1.DaemonSet{}, name, ns); err != nil {
+		return err
+	}
+
+	// Delete Service
+	if err := r.cleanupResource(ctx, &corev1.Service{}, name, ns); err != nil {
+		return err
+	}
+
+	// Delete ServiceMonitor
+	if err := r.cleanupResource(ctx, &monitoringv1.ServiceMonitor{}, name, ns); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // blackboxExporterDaemonSet returns a blackbox-exporter DaemonSet object
@@ -596,6 +740,18 @@ func (r *NodeExporterReconciler) reconcileKubeStateMetrics(ctx context.Context, 
 		return err
 	}
 
+	// Create or update the Service
+	if err := r.createOrUpdateService(ctx, nodeExporter, "kube-state-metrics", kubeStateMetricsPort); err != nil {
+		logger.Error(err, "Failed to create/update Service for KubeStateMetrics")
+		return err
+	}
+
+	// Create or update the ServiceMonitor
+	if err := r.createOrUpdateServiceMonitor(ctx, nodeExporter, "kube-state-metrics"); err != nil {
+		logger.Error(err, "Failed to create/update ServiceMonitor for KubeStateMetrics")
+		return err
+	}
+
 	// Create or update the DaemonSet
 	daemonSet := r.kubeStateMetricsDaemonSet(nodeExporter)
 
@@ -628,25 +784,27 @@ func (r *NodeExporterReconciler) reconcileKubeStateMetrics(ctx context.Context, 
 	return nil
 }
 
-// cleanupKubeStateMetrics removes the Kube State Metrics DaemonSet if it exists
+// cleanupKubeStateMetrics removes the Kube State Metrics resources if they exist
 func (r *NodeExporterReconciler) cleanupKubeStateMetrics(ctx context.Context, nodeExporter *cachev1alpha1.NodeExporter) error {
-	// Check if DaemonSet exists
-	daemonSet := &appsv1.DaemonSet{}
-	err := r.Get(ctx, types.NamespacedName{
-		Name:      "kube-state-metrics-" + nodeExporter.Name,
-		Namespace: nodeExporter.Namespace,
-	}, daemonSet)
+	name := "kube-state-metrics-" + nodeExporter.Name
+	ns := nodeExporter.Namespace
 
-	if err != nil {
-		if errors.IsNotFound(err) {
-			// DaemonSet doesn't exist, nothing to do
-			return nil
-		}
+	// Delete DaemonSet
+	if err := r.cleanupResource(ctx, &appsv1.DaemonSet{}, name, ns); err != nil {
 		return err
 	}
 
-	// DaemonSet exists, delete it
-	return r.Delete(ctx, daemonSet)
+	// Delete Service
+	if err := r.cleanupResource(ctx, &corev1.Service{}, name, ns); err != nil {
+		return err
+	}
+
+	// Delete ServiceMonitor
+	if err := r.cleanupResource(ctx, &monitoringv1.ServiceMonitor{}, name, ns); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // kubeStateMetricsDaemonSet returns a kube-state-metrics DaemonSet object
@@ -726,5 +884,7 @@ func (r *NodeExporterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&appsv1.DaemonSet{}).
 		Owns(&corev1.ServiceAccount{}).
 		Owns(&corev1.ConfigMap{}).
+		Owns(&corev1.Service{}).
+		Owns(&monitoringv1.ServiceMonitor{}).
 		Complete(r)
 }

@@ -1,14 +1,15 @@
 apiVersion: cache.slys.dev/v1alpha1
 kind: NodeExporter
 metadata:
+  name: monitoring-stack
+  namespace: monitoring
   labels:
-    app.kubernetes.io/name: node-exporter-operator
-    app.kubernetes.io/managed-by: kustomize
-  name: nodeexporter-sample
+    app.kubernetes.io/name: monitoring-stack
+    app.kubernetes.io/part-of: node-exporter-operator
 spec:
-  nodeExporter:
-    enabled: true
-  blackboxExporter:
-    enabled: true
-  kubeStateMetrics:
-    enabled: true
+  nodeExporterSettings:
+    enabled: true  # Enable Node Exporter for system metrics
+  blackboxExporterSettings:
+    enabled: true  # Enable Blackbox Exporter for endpoint probing
+  kubeStateMetricsSettings:
+    enabled: true  # Enable Kube State Metrics for Kubernetes object metrics
