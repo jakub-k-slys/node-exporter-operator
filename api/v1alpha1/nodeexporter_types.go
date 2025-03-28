@@ -59,6 +59,7 @@ type NodeExporterStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:resource:scope=Cluster
 
 // NodeExporter is the Schema for the nodeexporters API
 // +kubebuilder:subresource:status

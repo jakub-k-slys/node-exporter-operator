@@ -12,7 +12,7 @@ spec:
     listKind: NodeExporterList
     plural: nodeexporters
     singular: nodeexporter
-  scope: Namespaced
+  scope: Cluster
   versions:
   - name: v1alpha1
     schema:
