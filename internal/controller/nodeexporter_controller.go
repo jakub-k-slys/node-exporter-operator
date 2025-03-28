@@ -34,7 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	cachev1alpha1 "github.com/jakub-k-slys/node-exporter-operator/api/v1alpha1"
+	exporterv1alpha1 "github.com/jakub-k-slys/node-exporter-operator/api/v1alpha1"
 )
 
 // ExporterConfig holds configuration for an exporter
@@ -65,9 +65,9 @@ type NodeExporterReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=cache.slys.dev,resources=nodeexporters,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=cache.slys.dev,resources=nodeexporters/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=cache.slys.dev,resources=nodeexporters/finalizers,verbs=update
+// +kubebuilder:rbac:groups=exporter.slys.dev,resources=nodeexporters,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=exporter.slys.dev,resources=nodeexporters/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=exporter.slys.dev,resources=nodeexporters/finalizers,verbs=update
 // +kubebuilder:rbac:groups=apps,resources=daemonsets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
@@ -82,7 +82,7 @@ func (r *NodeExporterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	logger.Info("Reconciling NodeExporter")
 
 	// Fetch the NodeExporter instance
-	nodeExporter := &cachev1alpha1.NodeExporter{}
+	nodeExporter := &exporterv1alpha1.NodeExporter{}
 	if err := r.Get(ctx, req.NamespacedName, nodeExporter); err != nil {
 		if errors.IsNotFound(err) {
 			logger.Info("NodeExporter resource not found. Ignoring since object must be deleted")
@@ -146,7 +146,7 @@ func (r *NodeExporterReconciler) reconcileResources(ctx context.Context, cfg Exp
 	logger := log.FromContext(ctx)
 
 	// Get NodeExporter instance for owner reference
-	nodeExporter := &cachev1alpha1.NodeExporter{}
+	nodeExporter := &exporterv1alpha1.NodeExporter{}
 	if err := r.Get(ctx, types.NamespacedName{Name: cfg.Name, Namespace: "default"}, nodeExporter); err != nil {
 		return err
 	}
@@ -179,7 +179,7 @@ func (r *NodeExporterReconciler) reconcileResources(ctx context.Context, cfg Exp
 }
 
 // createOrUpdateDaemonSet creates or updates a DaemonSet for an exporter
-func (r *NodeExporterReconciler) createOrUpdateDaemonSet(ctx context.Context, cfg ExporterConfig, nodeExporter *cachev1alpha1.NodeExporter) error {
+func (r *NodeExporterReconciler) createOrUpdateDaemonSet(ctx context.Context, cfg ExporterConfig, nodeExporter *exporterv1alpha1.NodeExporter) error {
 	labels := map[string]string{
 		"app":        cfg.Name,
 		"controller": nodeExporter.Name,
@@ -239,7 +239,7 @@ func (r *NodeExporterReconciler) createOrUpdateDaemonSet(ctx context.Context, cf
 
 // cleanupExporter removes all resources for an exporter
 func (r *NodeExporterReconciler) cleanupExporter(ctx context.Context, cfg ExporterConfig) error {
-	nodeExporter := &cachev1alpha1.NodeExporter{}
+	nodeExporter := &exporterv1alpha1.NodeExporter{}
 	if err := r.Get(ctx, types.NamespacedName{Name: cfg.Name, Namespace: "default"}, nodeExporter); err != nil {
 		if errors.IsNotFound(err) {
 			return nil
@@ -267,7 +267,7 @@ func (r *NodeExporterReconciler) cleanupExporter(ctx context.Context, cfg Export
 }
 
 // getNodeExporterConfig returns configuration for Node Exporter
-func (r *NodeExporterReconciler) getNodeExporterConfig(ne *cachev1alpha1.NodeExporter) ExporterConfig {
+func (r *NodeExporterReconciler) getNodeExporterConfig(ne *exporterv1alpha1.NodeExporter) ExporterConfig {
 	volumes := []corev1.Volume{
 		{
 			Name: "proc",
@@ -349,7 +349,7 @@ func (r *NodeExporterReconciler) getNodeExporterConfig(ne *cachev1alpha1.NodeExp
 }
 
 // getBlackboxExporterConfig returns configuration for Blackbox Exporter
-func (r *NodeExporterReconciler) getBlackboxExporterConfig(ne *cachev1alpha1.NodeExporter) ExporterConfig {
+func (r *NodeExporterReconciler) getBlackboxExporterConfig(ne *exporterv1alpha1.NodeExporter) ExporterConfig {
 	volumes := []corev1.Volume{
 		{
 			Name: "config",
@@ -407,7 +407,7 @@ func (r *NodeExporterReconciler) getBlackboxExporterConfig(ne *cachev1alpha1.Nod
 }
 
 // getKubeStateMetricsConfig returns configuration for Kube State Metrics
-func (r *NodeExporterReconciler) getKubeStateMetricsConfig(ne *cachev1alpha1.NodeExporter) ExporterConfig {
+func (r *NodeExporterReconciler) getKubeStateMetricsConfig(ne *exporterv1alpha1.NodeExporter) ExporterConfig {
 	return ExporterConfig{
 		Name:  "kube-state-metrics",
 		Image: "registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.10.1",
@@ -453,7 +453,7 @@ func (r *NodeExporterReconciler) getKubeStateMetricsConfig(ne *cachev1alpha1.Nod
 }
 
 // Helper functions from the original implementation remain unchanged
-func (r *NodeExporterReconciler) createServiceAccount(ctx context.Context, name string, namespace string, nodeExporter *cachev1alpha1.NodeExporter) error {
+func (r *NodeExporterReconciler) createServiceAccount(ctx context.Context, name string, namespace string, nodeExporter *exporterv1alpha1.NodeExporter) error {
 	sa := &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
@@ -481,7 +481,7 @@ func (r *NodeExporterReconciler) createServiceAccount(ctx context.Context, name 
 	return nil
 }
 
-func (r *NodeExporterReconciler) createOrUpdateService(ctx context.Context, nodeExporter *cachev1alpha1.NodeExporter, name string, port int32) error {
+func (r *NodeExporterReconciler) createOrUpdateService(ctx context.Context, nodeExporter *exporterv1alpha1.NodeExporter, name string, port int32) error {
 	labels := map[string]string{
 		"app":        name,
 		"controller": nodeExporter.Name,
@@ -522,7 +522,7 @@ func (r *NodeExporterReconciler) createOrUpdateService(ctx context.Context, node
 	return r.Update(ctx, found)
 }
 
-func (r *NodeExporterReconciler) createOrUpdateServiceMonitor(ctx context.Context, nodeExporter *cachev1alpha1.NodeExporter, name string) error {
+func (r *NodeExporterReconciler) createOrUpdateServiceMonitor(ctx context.Context, nodeExporter *exporterv1alpha1.NodeExporter, name string) error {
 	labels := map[string]string{
 		"app":        name,
 		"controller": nodeExporter.Name,
@@ -578,7 +578,7 @@ func (r *NodeExporterReconciler) cleanupResource(ctx context.Context, obj client
 // SetupWithManager sets up the controller with the Manager.
 func (r *NodeExporterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&cachev1alpha1.NodeExporter{}).
+		For(&exporterv1alpha1.NodeExporter{}).
 		Owns(&appsv1.DaemonSet{}).
 		Owns(&corev1.ServiceAccount{}).
 		Owns(&corev1.ConfigMap{}).
