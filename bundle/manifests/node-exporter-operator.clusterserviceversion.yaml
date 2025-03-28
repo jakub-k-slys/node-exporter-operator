@@ -9,26 +9,27 @@ metadata:
           "kind": "NodeExporter",
           "metadata": {
             "labels": {
-              "app.kubernetes.io/managed-by": "kustomize",
-              "app.kubernetes.io/name": "node-exporter-operator"
+              "app.kubernetes.io/name": "monitoring-stack",
+              "app.kubernetes.io/part-of": "node-exporter-operator"
             },
-            "name": "nodeexporter-sample"
+            "name": "monitoring-stack",
+            "namespace": "monitoring"
           },
           "spec": {
-            "blackboxExporter": {
+            "blackboxExporterSettings": {
               "enabled": true
             },
-            "kubeStateMetrics": {
+            "kubeStateMetricsSettings": {
               "enabled": true
             },
-            "nodeExporter": {
+            "nodeExporterSettings": {
               "enabled": true
             }
           }
         }
       ]
     capabilities: Basic Install
-    createdAt: "2025-03-27T23:18:36Z"
+    createdAt: "2025-03-28T13:21:08Z"
     operators.operatorframework.io/builder: operator-sdk-v1.39.2
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
   name: node-exporter-operator.v0.0.1
@@ -68,6 +69,7 @@ spec:
           - apps
           resources:
           - daemonsets
+          - deployments
           verbs:
           - create
           - delete
@@ -77,7 +79,36 @@ spec:
           - update
           - watch
         - apiGroups:
-          - cache.slys.dev
+          - ""
+          resources:
+          - configmaps
+          - serviceaccounts
+          - services
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
+        - apiGroups:
+          - ""
+          resources:
+          - pods
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - exporter.slys.dev
           resources:
           - nodeexporters
           verbs:
@@ -89,19 +120,31 @@ spec:
           - update
           - watch
         - apiGroups:
-          - cache.slys.dev
+          - exporter.slys.dev
           resources:
           - nodeexporters/finalizers
           verbs:
           - update
         - apiGroups:
-          - cache.slys.dev
+          - exporter.slys.dev
           resources:
           - nodeexporters/status
           verbs:
           - get
           - patch
           - update
+        - apiGroups:
+          - monitoring.coreos.com
+          resources:
+          - servicemonitors
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
         - apiGroups:
           - authentication.k8s.io
           resources:
