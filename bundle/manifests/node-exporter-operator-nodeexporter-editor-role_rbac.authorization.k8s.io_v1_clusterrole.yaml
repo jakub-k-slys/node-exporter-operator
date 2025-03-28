@@ -8,7 +8,7 @@ metadata:
   name: node-exporter-operator-nodeexporter-editor-role
 rules:
 - apiGroups:
-  - cache.slys.dev
+  - exporter.slys.dev
   resources:
   - nodeexporters
   verbs:
@@ -20,7 +20,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - cache.slys.dev
+  - exporter.slys.dev
   resources:
   - nodeexporters/status
   verbs:

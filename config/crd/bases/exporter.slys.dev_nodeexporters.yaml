@@ -1,18 +1,18 @@
+---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.16.1
-  creationTimestamp: null
-  name: nodeexporters.cache.slys.dev
+  name: nodeexporters.exporter.slys.dev
 spec:
-  group: cache.slys.dev
+  group: exporter.slys.dev
   names:
     kind: NodeExporter
     listKind: NodeExporterList
     plural: nodeexporters
     singular: nodeexporter
-  scope: Namespaced
+  scope: Cluster
   versions:
   - name: v1alpha1
     schema:
@@ -126,9 +126,3 @@ spec:
     storage: true
     subresources:
       status: {}
-status:
-  acceptedNames:
-    kind: ""
-    plural: ""
-  conditions: null
-  storedVersions: null

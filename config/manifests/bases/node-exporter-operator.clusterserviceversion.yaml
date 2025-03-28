@@ -2,7 +2,7 @@ apiVersion: operators.coreos.com/v1alpha1
 kind: ClusterServiceVersion
 metadata:
   annotations:
-    alm-examples: '[]'
+    alm-examples: '[{"apiVersion":"exporter.slys.dev/v1alpha1","kind":"NodeExporter","metadata":{"name":"monitoring-stack","labels":{"app.kubernetes.io/name":"monitoring-stack","app.kubernetes.io/part-of":"node-exporter-operator"}},"spec":{"nodeExporterSettings":{"enabled":true},"blackboxExporterSettings":{"enabled":true},"kubeStateMetricsSettings":{"enabled":true}}}]'
     capabilities: Basic Install
   name: node-exporter-operator.v0.0.0
   namespace: placeholder
@@ -13,7 +13,7 @@ spec:
     - description: NodeExporter is the Schema for the nodeexporters API
       displayName: Node Exporter
       kind: NodeExporter
-      name: nodeexporters.cache.slys.dev
+      name: nodeexporters.exporter.slys.dev
       specDescriptors:
       - displayName: Blackbox Exporter Settings
         path: blackboxExporter

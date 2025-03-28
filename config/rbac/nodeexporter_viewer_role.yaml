@@ -8,7 +8,7 @@ metadata:
   name: nodeexporter-viewer-role
 rules:
 - apiGroups:
-  - cache.slys.dev
+  - exporter.slys.dev
   resources:
   - nodeexporters
   verbs:
@@ -16,7 +16,7 @@ rules:
   - list
   - watch
 - apiGroups:
-  - cache.slys.dev
+  - exporter.slys.dev
   resources:
   - nodeexporters/status
   verbs:

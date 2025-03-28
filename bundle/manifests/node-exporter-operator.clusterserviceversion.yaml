@@ -5,15 +5,14 @@ metadata:
     alm-examples: |-
       [
         {
-          "apiVersion": "cache.slys.dev/v1alpha1",
+          "apiVersion": "exporter.slys.dev/v1alpha1",
           "kind": "NodeExporter",
           "metadata": {
             "labels": {
               "app.kubernetes.io/name": "monitoring-stack",
               "app.kubernetes.io/part-of": "node-exporter-operator"
             },
-            "name": "monitoring-stack",
-            "namespace": "monitoring"
+            "name": "monitoring-stack"
           },
           "spec": {
             "blackboxExporterSettings": {
@@ -29,7 +28,7 @@ metadata:
         }
       ]
     capabilities: Basic Install
-    createdAt: "2025-03-28T13:21:08Z"
+    createdAt: "2025-03-28T13:30:02Z"
     operators.operatorframework.io/builder: operator-sdk-v1.39.2
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
   name: node-exporter-operator.v0.0.1
@@ -41,7 +40,7 @@ spec:
     - description: NodeExporter is the Schema for the nodeexporters API
       displayName: Node Exporter
       kind: NodeExporter
-      name: nodeexporters.cache.slys.dev
+      name: nodeexporters.exporter.slys.dev
       specDescriptors:
       - displayName: Blackbox Exporter Settings
         path: blackboxExporter

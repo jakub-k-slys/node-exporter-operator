@@ -1,4 +1,4 @@
-apiVersion: cache.slys.dev/v1alpha1
+apiVersion: exporter.slys.dev/v1alpha1
 kind: NodeExporter
 metadata:
   name: monitoring-stack

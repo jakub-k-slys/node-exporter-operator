@@ -1,4 +1,4 @@
 ## Append samples of your project ##
 resources:
-- cache_v1alpha1_nodeexporter.yaml
+- exporter_v1alpha1_nodeexporter.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples
