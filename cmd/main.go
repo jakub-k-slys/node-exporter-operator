@@ -25,6 +25,7 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
+	monitoring "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -35,7 +36,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	cachev1alpha1 "github.com/jakub-k-slys/node-exporter-operator/api/v1alpha1"
+	exporter1alpha1 "github.com/jakub-k-slys/node-exporter-operator/api/v1alpha1"
 	"github.com/jakub-k-slys/node-exporter-operator/internal/controller"
 	// +kubebuilder:scaffold:imports
 )
@@ -47,8 +48,9 @@ var (
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	monitoring.AddToScheme(scheme)
 
-	utilruntime.Must(cachev1alpha1.AddToScheme(scheme))
+	utilruntime.Must(exporter1alpha1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 

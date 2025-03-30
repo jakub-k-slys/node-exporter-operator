@@ -16,7 +16,7 @@ resources:
     namespaced: true
   controller: true
   domain: slys.dev
-  group: cache
+  group: exporter
   kind: NodeExporter
   path: github.com/jakub-k-slys/node-exporter-operator/api/v1alpha1
   version: v1alpha1
